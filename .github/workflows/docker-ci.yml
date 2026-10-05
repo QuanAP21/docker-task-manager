@@ -18,24 +18,84 @@ jobs:
       - name: Prepare environment
         run: cp .env.example .env
 
+      - name: Validate Compose config
+        run: docker compose -f docker-compose.prod.yml config
+
       - name: Build production stack
         run: docker compose -f docker-compose.prod.yml build
 
       - name: Start production stack
         run: docker compose -f docker-compose.prod.yml up -d
 
-      - name: Wait for services
-        run: sleep 25
+      - name: Wait for all services to become healthy
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPOSE="docker compose -f docker-compose.prod.yml"
+          services=(db backend frontend)
+
+          for attempt in $(seq 1 36); do
+            echo "Health check attempt ${attempt}/36"
+            all_healthy=true
+
+            for service in "${services[@]}"; do
+              cid=$($COMPOSE ps -q "$service")
+              if [ -z "$cid" ]; then
+                echo "  $service: container not created yet"
+                all_healthy=false
+                continue
+              fi
+
+              status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid")
+              echo "  $service: $status"
+
+              if [ "$status" = "unhealthy" ] || [ "$status" = "exited" ] || [ "$status" = "dead" ]; then
+                echo "Service $service entered a failure state."
+                $COMPOSE ps -a
+                $COMPOSE logs --tail=150 "$service"
+                exit 1
+              fi
+
+              if [ "$status" != "healthy" ]; then
+                all_healthy=false
+              fi
+            done
+
+            if [ "$all_healthy" = true ]; then
+              echo "All services are healthy."
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Timed out waiting for healthy services."
+          $COMPOSE ps -a
+          $COMPOSE logs --tail=200
+          exit 1
 
       - name: Show containers
-        run: docker compose -f docker-compose.prod.yml ps
+        run: docker compose -f docker-compose.prod.yml ps -a
+
+      - name: Normalize smoke test line endings
+        run: sed -i 's/\r$//' scripts/smoke-test.sh
 
       - name: Run smoke test
-        run: scripts/smoke-test.sh docker-compose.prod.yml
+        shell: bash
+        run: bash scripts/smoke-test.sh docker-compose.prod.yml
 
-      - name: Show logs on failure
+      - name: Show diagnostics on failure
         if: failure()
-        run: docker compose -f docker-compose.prod.yml logs
+        shell: bash
+        run: |
+          echo "===== docker compose ps -a ====="
+          docker compose -f docker-compose.prod.yml ps -a
+          echo "===== backend logs ====="
+          docker compose -f docker-compose.prod.yml logs --tail=200 backend || true
+          echo "===== frontend logs ====="
+          docker compose -f docker-compose.prod.yml logs --tail=200 frontend || true
+          echo "===== database logs ====="
+          docker compose -f docker-compose.prod.yml logs --tail=200 db || true
 
       - name: Shutdown
         if: always()
