@@ -1,0 +1,42 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  docker-production-smoke-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Build production stack
+        run: docker compose -f docker-compose.prod.yml build
+
+      - name: Start production stack
+        run: docker compose -f docker-compose.prod.yml up -d
+
+      - name: Wait for services
+        run: sleep 25
+
+      - name: Show containers
+        run: docker compose -f docker-compose.prod.yml ps
+
+      - name: Run smoke test
+        run: scripts/smoke-test.sh docker-compose.prod.yml
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs
+
+      - name: Shutdown
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v
