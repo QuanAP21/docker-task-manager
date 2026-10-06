@@ -1,4 +1,3 @@
-# Generated manually for the Docker Task Manager demo
 from django.db import migrations, models
 
 

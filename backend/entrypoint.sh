@@ -1,4 +1,3 @@
-#!/bin/sh
 set -e
 
 echo "Waiting for database at ${DB_HOST}:${DB_PORT}..."
