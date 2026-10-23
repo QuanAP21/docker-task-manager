@@ -10,6 +10,7 @@ function App() {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
 
   async function loadTasks() {
     setLoading(true);
@@ -50,12 +51,34 @@ function App() {
   }
 
   async function toggleTask(task) {
-    await fetch(`${API_URL}${task.id}/`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...task, is_done: !task.is_done }),
-    });
-    loadTasks();
+    if (updatingId !== null) return;
+    setUpdatingId(task.id);
+    setMessage('');
+    try {
+      // PATCH updates only the status, preserving title, description and created_at.
+      const response = await fetch(`${API_URL}${task.id}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_done: !task.is_done }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const updated = await response.json();
+      if (updated.is_done !== !task.is_done) {
+        throw new Error('Trạng thái trả về không khớp.');
+      }
+      setTasks((current) => current.map((item) =>
+        item.id === task.id ? updated : item
+      ));
+      setMessage(updated.is_done
+        ? 'Đã đánh dấu công việc hoàn thành.'
+        : 'Đã hoàn tác: công việc trở lại trạng thái chưa hoàn thành.');
+    } catch (error) {
+      setMessage(`Không thể cập nhật trạng thái. ${error.message}`);
+    } finally {
+      setUpdatingId(null);
+    }
   }
 
   async function deleteTask(id) {
@@ -104,8 +127,8 @@ function App() {
                 <p>{task.description || 'Không có mô tả'}</p>
               </div>
               <div className="actions">
-                <button onClick={() => toggleTask(task)}>
-                  {task.is_done ? 'Hoàn tác' : 'Hoàn thành'}
+                <button disabled={updatingId === task.id} onClick={() => toggleTask(task)}>
+                  {updatingId === task.id ? 'Đang lưu...' : (task.is_done ? 'Hoàn tác' : 'Hoàn thành')}
                 </button>
                 <button className="danger" onClick={() => deleteTask(task.id)}>Xóa</button>
               </div>

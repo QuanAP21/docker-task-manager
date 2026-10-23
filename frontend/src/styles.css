@@ -79,3 +79,5 @@ button.danger { background: #d0393e; }
 @media (max-width: 720px) {
   .task, .section-header { flex-direction: column; align-items: stretch; }
 }
+
+button:disabled { opacity: .65; cursor: not-allowed; }

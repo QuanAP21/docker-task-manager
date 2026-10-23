@@ -88,6 +88,20 @@ Check "PUT /api/tasks/{id}/ updates task" {
     if ($task.is_done -ne $true) { throw "Task was not updated" }
 }
 
+Check "PATCH /api/tasks/{id}/ undoes completion" {
+    $body = @{ is_done = $false } | ConvertTo-Json
+    $task = Invoke-RestMethod -Uri "$baseUrl/api/tasks/$createdId/" -Method Patch -ContentType "application/json" -Body $body
+    if ($task.is_done -ne $false) { throw "Undo did not reset task status" }
+    $persisted = Invoke-RestMethod -Uri "$baseUrl/api/tasks/$createdId/" -Method Get
+    if ($persisted.is_done -ne $false) { throw "Undo was not persisted in database" }
+}
+
+Check "PATCH /api/tasks/{id}/ completes task again" {
+    $body = @{ is_done = $true } | ConvertTo-Json
+    $task = Invoke-RestMethod -Uri "$baseUrl/api/tasks/$createdId/" -Method Patch -ContentType "application/json" -Body $body
+    if ($task.is_done -ne $true) { throw "Re-completion did not work" }
+}
+
 Check "DELETE /api/tasks/{id}/ deletes task" {
     Invoke-RestMethod -Uri "$baseUrl/api/tasks/$createdId/" -Method Delete | Out-Null
 }

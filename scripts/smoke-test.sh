@@ -73,6 +73,20 @@ DONE=$(printf '%s' "$UPDATED" | json_done)
 pass "PUT /api/tasks/{id}/ updates task"
 TOTAL=$((TOTAL + 1))
 
+UNDONE=$(curl --fail --silent -X PATCH "$BASE_URL/api/tasks/$CREATED_ID/" \
+  -H "Content-Type: application/json" -d '{"is_done":false}')
+[ "$(printf '%s' "$UNDONE" | json_done)" = "false" ] || fail "PATCH undo" "Status not false"
+PERSISTED=$(curl --fail --silent "$BASE_URL/api/tasks/$CREATED_ID/")
+[ "$(printf '%s' "$PERSISTED" | json_done)" = "false" ] || fail "PATCH undo" "Database status not persisted"
+pass "PATCH /api/tasks/{id}/ undoes completion and persists"
+TOTAL=$((TOTAL + 1))
+
+REDONE=$(curl --fail --silent -X PATCH "$BASE_URL/api/tasks/$CREATED_ID/" \
+  -H "Content-Type: application/json" -d '{"is_done":true}')
+[ "$(printf '%s' "$REDONE" | json_done)" = "true" ] || fail "PATCH re-complete" "Status not true"
+pass "PATCH /api/tasks/{id}/ completes task again"
+TOTAL=$((TOTAL + 1))
+
 check "DELETE /api/tasks/{id}/ deletes task" curl --fail --silent -X DELETE "$BASE_URL/api/tasks/$CREATED_ID/" >/dev/null
 check "Docker DNS resolves db service from backend" docker compose -f "$COMPOSE_FILE" exec -T backend getent hosts db
 check "Backend can reach db:5432" docker compose -f "$COMPOSE_FILE" exec -T backend nc -zv db 5432
